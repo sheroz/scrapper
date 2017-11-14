@@ -18,23 +18,114 @@ import (
 	"google.golang.org/api/option"
 	"golang.org/x/net/html"
 	"github.com/BurntSushi/toml"
+	"os"
+	"time"
+	"regexp"
 )
 
 func main() {
-	//scrape_html()
-	translate_html()
-}
+	// scrape_html()
+	// translate_html()
+	// createClientWithKey()
 
-func scrape_html() {
-	doc, err := goquery.NewDocument("http://sheroz.com/pages/blog/google-recaptcha-ajax-render-error.html")
+
+	urls := [] string {
+		"",
+	}
+
+	t := time.Now()
+	s := t.Format("20060102-150405")
+	filename := "/Users/sheroz/Documents/tmp/scraping-" + s + ".txt"
+
+
+	f, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	htmlResult := ""
-	textResult := ""
+	defer f.Close()
+	totalCount := 0
+	for _,url := range urls {
+
+		document, err := goquery.NewDocument(url)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var selector string
+		var html string
+		var text string
+		var textSum string
+
+		textSum = ""
+
+
+		selector = "#product_tabs_description_contents"
+		html, text, err = scrape_html(document, selector)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(text)
+		textSum += text
+
+
+		selector = "#product_tabs_quickinfo_contents"
+		html, text, err = scrape_html(document, selector)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(text)
+		textSum += text
+
+		selector = "#product_tabs_additional_contents"
+		html, text, err = scrape_html(document, selector)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(text)
+		textSum += text
+
+		wordCount := get_word_counts(textSum)
+
+		f.WriteString("***\n")
+		f.WriteString(url)
+		f.WriteString("\n")
+		f.WriteString(textSum)
+		f.WriteString("\n")
+		f.WriteString(fmt.Sprintf("%v", wordCount))
+		f.WriteString("\n")
+		f.WriteString("***\n")
+		totalCount += wordCount
+
+		_ = html
+	}
+	f.WriteString("\n")
+	f.WriteString("====================\n")
+	f.WriteString("Total word count: ")
+	f.WriteString(fmt.Sprintf("%v", totalCount))
+	f.WriteString("\n")
+	f.WriteString("***\n")
+	f.Sync()
+
+	fmt.Println("Result saved in:" + filename)
+
+}
+
+func get_word_counts(text string) int {
+	words:= regexp.MustCompile("\\b[^\\s]+\\b")
+	res := words.FindAllString(text, -1)
+	return len(res)
+}
+
+func scrape_html(document *goquery.Document, selector string) (string, string, error){
 
 	allowedTags := [] string {
+		"h1",
+		"h2",
+		"h3",
+		"h4",
+		"h5",
+		"h6",
 		"a",
 		"p",
 		"ul",
@@ -46,8 +137,11 @@ func scrape_html() {
 		allowedTagsMap[v] = true
 	}
 
+	var htmlBuf bytes.Buffer
+	var textBuf bytes.Buffer
+
 	// Find the review items
-	doc.Find(".content-panel").Each(func(i int, s *goquery.Selection) {
+	document.Find(selector).Each(func(i int, s *goquery.Selection) {
 		// For each item found, get the band and title
 		/*
 		band := s.Find("a").Text()
@@ -61,18 +155,18 @@ func scrape_html() {
 		s.Find("br").Remove()
 		s.Find("hr").Remove()
 
-		var buf bytes.Buffer
-		count:=0
+		// count:=0
 
 		var f func(*html.Node)
 		f = func(n *html.Node) {
 			if n == nil { return }
-			count++
+			//count++
 			if n.Type == html.ElementNode {
 				_,tagAllowed := allowedTagsMap[n.Data]
 				if tagAllowed {
-					buf.WriteString("<")
-					buf.WriteString(n.Data)
+					htmlBuf.WriteString("<")
+					text := strings.TrimSpace(n.Data)
+					htmlBuf.WriteString(text)
 					if n.Data == "a" {
 						m := make(map[string]string)
 						for _, a := range n.Attr {
@@ -80,22 +174,24 @@ func scrape_html() {
 						}
 						href, ok := m["href"]
 						if ok {
-							buf.WriteString(" href=\"")
-							buf.WriteString(href)
-							buf.WriteString("\"")
+							htmlBuf.WriteString(" href=\"")
+							htmlBuf.WriteString(href)
+							htmlBuf.WriteString("\"")
 						}
 					}
-					buf.WriteString(">")
+					htmlBuf.WriteString(">")
 				}
 				f(n.FirstChild)
 				if tagAllowed {
-					buf.WriteString("</")
-					buf.WriteString(n.Data)
-					buf.WriteString(">")
+					htmlBuf.WriteString("</")
+					text := strings.TrimSpace(n.Data)
+					htmlBuf.WriteString(text)
+					htmlBuf.WriteString(">")
 				}
 			}
 			if n.Type == html.TextNode {
-				buf.WriteString(n.Data)
+				text := strings.TrimSpace(n.Data)
+				htmlBuf.WriteString(text)
 			}
 			f(n.NextSibling)
 			/*
@@ -110,8 +206,8 @@ func scrape_html() {
 			f(n)
 		}
 
-		fmt.Println(count)
-		htmlResult = buf.String()
+		// fmt.Println(count)
+		textBuf.WriteString(s.Text())
 
 		/*
 		for _, n := range s.Nodes {
@@ -119,10 +215,13 @@ func scrape_html() {
 		}
 		*/
 		// htmlResult, _ = q.Html()
-		textResult = s.Text()
 	})
-	fmt.Println("*** HTML result ***")
-	fmt.Println(htmlResult)
+
+	htmlResult := htmlBuf.String()
+	textResult := textBuf.String()
+
+	// fmt.Println("*** HTML result ***")
+	// fmt.Println(htmlResult)
 
 	// remove empty lines
 	textResult = strings.TrimSpace(textResult)
@@ -136,9 +235,6 @@ func scrape_html() {
 		startLen = currentLen
 	}
 
-	fmt.Println("*** Text result ***")
-	fmt.Println(textResult)
-
 	/*
 	fmt.Println("*** Text result trimmed ***")
 	regex, err := regexp.Compile("\n\n")
@@ -148,6 +244,7 @@ func scrape_html() {
 	textResult = regex.ReplaceAllString(textResult, "\n")
 	fmt.Println(textResult)
 	*/
+	return htmlResult, textResult, nil
 }
 
 func translate_html() {
@@ -170,7 +267,7 @@ func translate_html() {
 
 	fmt.Printf("Version: %s\n", conf.Version)
 	fmt.Printf("Translation vendor: %s\n", conf.Translation.Vendor)
-	fmt.Printf("Translation apiKey: %s\n", conf.Translation.ApiKey)
+	// fmt.Printf("Translation apiKey: %s\n", conf.Translation.ApiKey)
 
 	ctx := context.Background()
 
@@ -230,8 +327,7 @@ func createClientWithKey() {
 	// import "google.golang.org/api/option"
 	// import "golang.org/x/text/language"
 	ctx := context.Background()
-
-	const apiKey = "AIzaSyAqWUf3wMHvSaRv-XpdVnsTfbVwYeB2XOg"
+	const apiKey = ""
 	client, err := translate.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		log.Fatal(err)
