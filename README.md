@@ -1,2 +1,2 @@
-# scrapper
-Go based web scrapper
+# web-scraper
+Go based web scraper
