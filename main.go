@@ -36,6 +36,7 @@ func main() {
 	t := time.Now()
 	s := t.Format("20060102-150405")
 	filename := "/Users/sheroz/Documents/tmp/scraping-" + s + ".txt"
+	fmt.Println("Opening file:" + filename)
 
 
 	f, err := os.Create(filename)
